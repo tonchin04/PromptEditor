@@ -6,3 +6,5 @@ flagged
 temp
 cache/*
 !cache/.gitkeep
+Input/*
+!Input/.gitkeep

@@ -35,7 +35,7 @@ thresholds = {
 }
 
 def loadImage(path):
-  fileTypes = ('jpg', 'png')
+  fileTypes = ('jpg', 'png', 'gif')
   images = []
   for type in fileTypes:
     images += glob.glob(path + '\\*.' + type)
@@ -78,23 +78,23 @@ def predict(
   tags_threshold,
   character_tags_threshold
   ):
-  
+
   tag_names, rating_indexes, general_indexes, character_indexes = loadLabels()
-  
+
   global loaded_model
-  
+
   if selected_model is None:
     selected_model = "SmilingWolf/wd-v1-4-moat-tagger-v2"
-  
+
   model = loaded_models[selected_model]
-  
+
   if model is None:
     loadModel(selected_model)
     changeModel(selected_model)
     model = loaded_models[selected_model]
-  
+
   _, height, width, _ = model.get_inputs()[0].shape
-  
+
   img_path = os.path.join(image_dir, image_name)
 
   with PIL.Image.open(img_path) as image:
@@ -103,7 +103,7 @@ def predict(
     new_image.paste(image, mask=image)
     image = new_image.convert("RGB")
     image = numpy.asarray(image)
-  
+
     image = image[:, :, ::-1]
 
     image = dbimutils.make_square(image, height)
@@ -114,12 +114,12 @@ def predict(
     input_name = model.get_inputs()[0].name
     label_name = model.get_outputs()[0].name
     probs = model.run([label_name], {input_name: image})[0]
-  
+
     labels = list(zip(tag_names, probs[0].astype(float)))
-    
+
     ratings_names = [labels[i] for i in rating_indexes]
     rating = dict(ratings_names)
-    
+
     general_names = [labels[i] for i in general_indexes]
     general_res = [x for x in general_names if x[1] > tags_threshold]
     general_res = dict(general_res)
@@ -127,7 +127,7 @@ def predict(
     character_names = [labels[i] for i in character_indexes]
     character_res = [x for x in character_names if x[1] > character_tags_threshold]
     character_res = dict(character_res)
-    
+
     detected_tags = dict(sorted(general_res.items(), key=lambda item: item[1], reverse=True))
     tags = (
       ", ".join(list(detected_tags.keys()))
@@ -147,11 +147,11 @@ def getSelectIndex(evt: gradio.SelectData, image_dir):
   global image_count
   pages = str(evt.index + 1) + "/" + str(image_count)
   return [filename, prompt, pages]
-  
+
 def getFilename(index):
   filename = image_list[index]
   return filename
-  
+
 def getPrompt(filename, image_dir):
   canReadPrompt = os.path.isfile(os.path.join(image_dir, (os.path.splitext(filename)[0] + '.txt')))
   if canReadPrompt:
@@ -213,13 +213,13 @@ with gradio.Blocks() as prompt_editor:
     with gradio.Column():
       interrogate_output = gradio.Textbox(label="Interrogate Output", show_copy_button=True)
       replace_prompt = gradio.Button(value="Replace Prompt", variant="primary")
-  
+
   gradio.Markdown("## Interrogate Info")
   with gradio.Row():
     rating = gradio.Label(label="Rating")
     tags = gradio.Label(label="Tags")
     character_tags = gradio.Label(label="Character Tag")
-  
+
   image_count = gradio.State()
   image_list = gradio.State()
 

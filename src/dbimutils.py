@@ -1,4 +1,5 @@
-# DanBooru IMage Utility functions
+# DanBooru IMage Utility functions borrowed from
+# https://github.com/toriato/stable-diffusion-webui-wd14-tagger
 
 import cv2
 import numpy as np
