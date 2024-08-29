@@ -1,0 +1,16 @@
+[
+  "SmilingWolf/wd-v1-4-moat-tagger-v2",
+  "SmilingWolf/wd-v1-4-swinv2-tagger-v2",
+  "SmilingWolf/wd-v1-4-convnext-tagger-v2",
+  "SmilingWolf/wd-v1-4-convnextv2-tagger-v2",
+  "SmilingWolf/wd-v1-4-vit-tagger-v2"
+]{
+  "SmilingWolf/wd-v1-4-moat-tagger-v2": null,
+  "SmilingWolf/wd-v1-4-swinv2-tagger-v2": null,
+  "SmilingWolf/wd-v1-4-convnext-tagger-v2": null,
+  "SmilingWolf/wd-v1-4-convnextv2-tagger-v2": null,
+  "SmilingWolf/wd-v1-4-vit-tagger-v2": null
+}{
+  "tags": 0.5,
+  "character_tags": 0.5
+}

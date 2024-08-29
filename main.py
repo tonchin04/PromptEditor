@@ -1,6 +1,10 @@
+from cProfile import label
 import glob
 import os
+import json
+import csv
 
+from tqdm import tqdm
 import gradio
 import huggingface_hub
 import numpy
@@ -12,6 +16,8 @@ from googletrans import Translator
 from src import dbimutils, sort
 
 translator = Translator()
+
+path = ""
 
 tagger_model_repos = [
   "SmilingWolf/wd-v1-4-moat-tagger-v2",
@@ -30,9 +36,11 @@ loaded_models = {
 }
 
 thresholds = {
-  "tags" : 0.5,
+  "tags" : 0.4,
   "character_tags" : 0.5
 }
+
+danbooru_dict_path = "./tags.csv"
 
 def loadImage(path):
   fileTypes = ('jpg', 'png', 'gif')
@@ -132,11 +140,33 @@ def predict(
     tags = (
       ", ".join(list(detected_tags.keys()))
       .replace("_", " ")
-      .replace("(", "\(")
-      .replace(")", "\)")
+      .replace("(", "\\(")
+      .replace(")", "\\)")
     )
 
+    # if os.path.isfile(danbooru_dict_path):
+    #   with open(danbooru_dict_path, 'r', encoding='UTF-8') as f:
+    #     tag_csv = csv.reader(f)
+    #     tag_dict = {rows[0]: rows[1] for rows in tag_csv}
+    #     translated_tags = tags
+    #     for old, new in tag_dict.items():
+    #       translated_tags = translated_tags.replace(old, new)
+
+    # else:
+    #   translated_tags = None
+
   return tags, rating, general_res, character_res
+
+def interrogate_all(image_dir, image_list, selected_model, tags_threshold, character_tags_threshold):
+
+  for image_path in tqdm(image_list):
+    image_name = os.path.basename(image_path[0])
+    interrogate_output, _, _, _ = predict(image_dir, image_name, selected_model, tags_threshold, character_tags_threshold)
+    image_name_wo_ext = os.path.splitext(image_name)[0]
+    with open(os.path.join(image_dir, (image_name_wo_ext + '.txt')), 'w', encoding='UTF-8') as f:
+      f.write(interrogate_output)
+  print('Done.')
+  return
 
 def replacePrompt(prompt):
   return prompt
@@ -180,61 +210,77 @@ def clearTranslatedPrompt():
   return ""
 
 with gradio.Blocks() as prompt_editor:
-  gradio.Markdown("# Prompt Editor v1.0")
-  with gradio.Row():
-    image_dir = gradio.Textbox(label="Image Directory Path", scale=5, max_lines=1)
-    reload_button = gradio.Button(value="Load", variant="secondary", scale=1)
+  gradio.Markdown("# Prompt Editor v1.1")
+  with gradio.Tab("Tagger"):
+    with gradio.Row():
+      image_dir = gradio.Textbox(label="Image Directory Path", scale=5, max_lines=1, value=path)
+      reload_button = gradio.Button(value="Load", variant="secondary", scale=1)
 
-  with gradio.Row():
-    images = gradio.Gallery(show_label=False, columns=5, container=True, scale=3)
+    with gradio.Row():
+      images = gradio.Gallery(show_label=False, columns=5, container=True, scale=3)
 
-    with gradio.Column(scale=2):
-      with gradio.Row():
-        selected = gradio.Textbox(label="Selected Image", max_lines=1, scale=4, interactive=False)
-        pages = gradio.Textbox(label="Number", scale=1)
-      prompt = gradio.Textbox(label="Prompt", show_copy_button=True)
-      with gradio.Row():
-        save_button = gradio.Button(value="Save", variant="primary")
-        revoke_button = gradio.Button(value="Revoke", variant="secondary")
-      with gradio.Row():
-        translate_button = gradio.Button(value="Translate", variant="secondary", scale=2)
-        is_auto_translate = gradio.Checkbox(label="Auto", scale=1)
-      ja_prompt = gradio.Textbox(label="Translated Prompt", show_copy_button=True)
+      with gradio.Column(scale=2):
+        with gradio.Row():
+          selected = gradio.Textbox(label="Selected Image", max_lines=1, scale=4, interactive=False)
+          pages = gradio.Textbox(label="Number", scale=1)
+        with gradio.Row():
+          previous_button = gradio.Button(value="Previous", variant="secondary")
+          next_button = gradio.Button(value="Next", variant="secondary")
+
+        prompt = gradio.Textbox(label="Prompt", show_copy_button=True)
+        ja_prompt = gradio.Textbox(label="Translated Prompt", show_copy_button=True)
+
+        with gradio.Row():
+          translate_button = gradio.Button(value="Translate", variant="secondary", scale=2)
+          is_auto_translate = gradio.Checkbox(label="Auto", scale=1)
+
+        with gradio.Row():
+          save_button = gradio.Button(value="Save", variant="primary")
+          revoke_button = gradio.Button(value="Revoke", variant="secondary")
 
 
-  with gradio.Row():
-    with gradio.Column():
-      with gradio.Row():
-        selected_model = gradio.Dropdown(label="Interrogate Model", choices=tagger_model_repos, value="SmilingWolf/wd-v1-4-moat-tagger-v2", scale=3, interactive=True)
-        interrogate_button = gradio.Button(value="Interrogate")
-      with gradio.Row():
-        tags_threshold = gradio.Slider(label="Tags Threshold", minimum=0, maximum=1, value=thresholds["tags"])
-        character_tags_threshold = gradio.Slider(label="Character Tags Threshold", minimum=0, maximum=1, value=thresholds["character_tags"])
-    with gradio.Column():
-      interrogate_output = gradio.Textbox(label="Interrogate Output", show_copy_button=True)
-      replace_prompt = gradio.Button(value="Replace Prompt", variant="primary")
+    gradio.Markdown("## Interrogate")
+    with gradio.Row():
+      with gradio.Column():
+        with gradio.Row():
+          selected_model = gradio.Dropdown(label="Interrogate Model", choices=tagger_model_repos, value="SmilingWolf/wd-v1-4-moat-tagger-v2", scale=3, interactive=True)
+          interrogate_button = gradio.Button(value="Interrogate")
+        with gradio.Row():
+          tags_threshold = gradio.Slider(label="Tags Threshold", minimum=0, maximum=1, value=thresholds["tags"])
+          character_tags_threshold = gradio.Slider(label="Character Tags Threshold", minimum=0, maximum=1, value=thresholds["character_tags"])
+      with gradio.Column():
+        interrogate_output = gradio.Textbox(label="Interrogate Output", show_copy_button=True)
+        with gradio.Row():
+          replace_prompt = gradio.Button(value="Replace Prompt", variant="primary")
+          interrogate_all_button = gradio.Button(value="Interrogate All Images", variant="secondary")
 
-  gradio.Markdown("## Interrogate Info")
-  with gradio.Row():
-    rating = gradio.Label(label="Rating")
-    tags = gradio.Label(label="Tags")
-    character_tags = gradio.Label(label="Character Tag")
+    with gradio.Row():
+      with gradio.Column():
+        rating = gradio.Label(label="Rating")
+        character_tags = gradio.Label(label="Character Tag")
+      tags = gradio.Label(label="Tags")
 
-  image_count = gradio.State()
-  image_list = gradio.State()
+    image_count = gradio.State()
+    image_list = gradio.State()
 
-  reload_button.click(fn=loadImage, inputs=image_dir, outputs=images)
-  images.select(fn=getSelectIndex, inputs=image_dir, outputs=[selected, prompt, pages])
-  selected.change(fn=clearTranslatedPrompt, outputs=ja_prompt)
-  selected.change(fn=detectAutoTranslate, inputs=[is_auto_translate, prompt], outputs=ja_prompt)
-  prompt.change(fn=detectAutoTranslate, inputs=[is_auto_translate, prompt], outputs=ja_prompt)
-  translate_button.click(fn=translatePrompt, inputs=prompt, outputs=ja_prompt)
-  revoke_button.click(fn=getPrompt, inputs=[selected, image_dir], outputs=prompt)
-  save_button.click(fn=savePrompt, inputs=[selected, image_dir, prompt])
-  selected_model.change(fn=changeModel, inputs=selected_model)
-  selected.change(fn=predict, inputs=[image_dir, selected, selected_model, tags_threshold, character_tags_threshold], outputs=[interrogate_output, rating, tags, character_tags])
-  interrogate_button.click(fn=predict, inputs=[image_dir, selected, selected_model, tags_threshold, character_tags_threshold], outputs=[interrogate_output, rating, tags, character_tags])
-  replace_prompt.click(fn=replacePrompt, inputs=interrogate_output, outputs=prompt)
+    reload_button.click(fn=loadImage, inputs=image_dir, outputs=images)
+    images.select(fn=getSelectIndex, inputs=image_dir, outputs=[selected, prompt, pages])
+    selected.change(fn=clearTranslatedPrompt, outputs=ja_prompt)
+    selected.change(fn=detectAutoTranslate, inputs=[is_auto_translate, prompt], outputs=ja_prompt)
+    prompt.change(fn=detectAutoTranslate, inputs=[is_auto_translate, prompt], outputs=ja_prompt)
+    translate_button.click(fn=translatePrompt, inputs=prompt, outputs=ja_prompt)
+    revoke_button.click(fn=getPrompt, inputs=[selected, image_dir], outputs=prompt)
+    save_button.click(fn=savePrompt, inputs=[selected, image_dir, prompt])
+    selected_model.change(fn=changeModel, inputs=selected_model)
+    selected.change(fn=predict, inputs=[image_dir, selected, selected_model, tags_threshold, character_tags_threshold], outputs=[interrogate_output, rating, tags, character_tags])
+    interrogate_button.click(fn=predict, inputs=[image_dir, selected, selected_model, tags_threshold, character_tags_threshold], outputs=[interrogate_output, rating, tags, character_tags])
+    interrogate_all_button.click(fn=interrogate_all, inputs=[image_dir, images, selected_model, tags_threshold, character_tags_threshold])
+    replace_prompt.click(fn=replacePrompt, inputs=interrogate_output, outputs=prompt)
+
+  with gradio.Tab("Settings"):
+    gradio.Markdown("## Tagger")
+    gradio.Markdown("Default Path:")
+
 
 if __name__ == "__main__":
   prompt_editor.launch(inbrowser=True)
